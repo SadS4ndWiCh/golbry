@@ -4,38 +4,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golbry/database"
+	"golbry/repositories"
 	"golbry/utils"
 	"log"
 	"net/http"
 	"strconv"
 )
 
-type Book struct {
-	Id     uint   `json:"id"`
-	Title  string `json:"title"`
-	Author string `json:"author"`
-	Year   uint16 `json:"year"`
-}
-
-type NewBook struct {
-	Title  string `json:"title"`
-	Author string `json:"author"`
-	Year   uint16 `json:"year"`
-}
-
-type DeleteBook struct {
-	Id uint `json:"id"`
-}
-
-var store []Book = make([]Book, 0)
-
 func main() {
+	db := database.ConnectDB()
+	defer db.Close()
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /books", func(w http.ResponseWriter, r *http.Request) {
-		json, err := json.Marshal(store)
+		bookRepository := repositories.NewBookRepository(db)
+		books, err := bookRepository.GetAll()
 		if err != nil {
-			http.Error(w, "Something went wrong", http.StatusInternalServerError)
+			log.Println(err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		json, err := json.Marshal(books)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
@@ -49,22 +44,26 @@ func main() {
 			return
 		}
 
-		for _, book := range store {
-			if book.Id == uint(id) {
-				json, err := json.Marshal(book)
-				if err != nil {
-					http.Error(w, "Something went wrong", http.StatusInternalServerError)
-					return
-				}
-
-				w.Write(json)
-				return
-			}
+		bookRepository := repositories.NewBookRepository(db)
+		book, err := bookRepository.GetById(uint(id))
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
 		}
+
+		json, err := json.Marshal(book)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write(json)
 	})
 
 	mux.HandleFunc("POST /books", func(w http.ResponseWriter, r *http.Request) {
-		var newBook NewBook
+		var newBook repositories.Book
 
 		if err := utils.DecodeJSONBody(w, r, &newBook); err != nil {
 			var malformedRequest *utils.MalformedRequest
@@ -79,18 +78,17 @@ func main() {
 			return
 		}
 
-		store = append(store, Book{
-			Id:     uint(len(store) + 1),
-			Title:  newBook.Title,
-			Author: newBook.Author,
-			Year:   newBook.Year,
-		})
+		bookRepository := repositories.NewBookRepository(db)
+		if _, err := bookRepository.InsertOne(newBook); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		w.WriteHeader(201)
 	})
 
 	mux.HandleFunc("DELETE /books", func(w http.ResponseWriter, r *http.Request) {
-		var deleteBook DeleteBook
+		var deleteBook repositories.DeleteBook
 
 		if err := utils.DecodeJSONBody(w, r, &deleteBook); err != nil {
 			var malformedRequest utils.MalformedRequest
@@ -104,14 +102,11 @@ func main() {
 			return
 		}
 
-		updatedBooks := make([]Book, 0)
-		for _, book := range store {
-			if deleteBook.Id != book.Id {
-				updatedBooks = append(updatedBooks, book)
-			}
+		bookRepository := repositories.NewBookRepository(db)
+		if err := bookRepository.DeleteById(deleteBook.Id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-
-		store = updatedBooks
 	})
 
 	fmt.Println("🪅 Server is running at :3000")
