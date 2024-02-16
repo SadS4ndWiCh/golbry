@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,17 +40,7 @@ func (br BookRepository) GetAll() (books []Book, err error) {
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		var book Book
-
-		err = rows.Scan(&book.Id, &book.Title, &book.Author, &book.Year)
-		if err != nil {
-			return
-		}
-
-		books = append(books, book)
-	}
-
+	books, err = pgx.CollectRows(rows, pgx.RowToStructByName[Book])
 	return
 }
 
