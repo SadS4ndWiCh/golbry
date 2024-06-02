@@ -1,23 +1,22 @@
-package routes
+package books
 
 import (
 	"encoding/json"
 	"errors"
-	"golbry/repositories"
-	"golbry/utils"
+	"golbry/internals/database"
+	"golbry/internals/repositories"
+	"golbry/internals/utils"
 	"log"
 	"net/http"
 	"strconv"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type BookHandler struct {
 	bookRepository repositories.BookRepository
 }
 
-func NewBookHandler(db *pgxpool.Pool) BookHandler {
-	return BookHandler{bookRepository: repositories.NewBookRepository(db)}
+func NewBookHandler(service *database.Service) BookHandler {
+	return BookHandler{bookRepository: repositories.NewBookRepository(service)}
 }
 
 func (bh *BookHandler) GetAll(w http.ResponseWriter, r *http.Request) {
